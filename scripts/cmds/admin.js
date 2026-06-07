@@ -1,10 +1,11 @@
 const { config } = global.GoatBot;
 const { writeFileSync } = require("fs-extra");
+const axios = require("axios");
 
 module.exports = {
     config: {
         name: "admin",
-        version: "2.0",
+        version: "2.1",
         author: "Rasel Mahmud",
         countDown: 5,
         role: 2,
@@ -28,18 +29,39 @@ module.exports = {
             removed: "╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n✅ 𝐀𝐃𝐌𝐈𝐍 𝐑𝐄𝐌𝐎𝐕𝐄𝐃 𝐒𝐔𝐂𝐂𝐄𝐒𝐒𝐅𝐔𝐋𝐋𝐘\n╚═════════════════╝\n\n❌ 𝗥𝗲𝗺𝗼𝘃𝗲𝗱 𝗔𝗱𝗺𝗶𝗻(𝘀): %1\n\n%2",
             notAdmin: "\n⚠️ 𝗡𝗼𝘁 𝗔𝗱𝗺𝗶𝗻(𝘀): %1\n\n%2",
             missingIdRemove: "╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n❌ 𝗘𝗥𝗥𝗢𝗥\n╚═════════════════╝\n\n⚠️ 𝗣𝗹𝗲𝗮𝘀𝗲 𝗺𝗲𝗻𝘁𝗶𝗼𝗻, 𝗿𝗲𝗽𝗹𝘆 𝗼𝗿 𝗲𝗻𝘁𝗲𝗿 𝗨𝗜𝗗 𝘁𝗼 𝗿𝗲𝗺𝗼𝘃𝗲 𝗮𝗱𝗺𝗶𝗻",
-            listAdmin: "╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n👑 𝐀𝐃𝐌𝐈𝐍 𝐇𝐈𝐄𝐑𝐀𝐑𝐂𝐇𝐘\n╚═════════════════╝\n\n%1\n\n╔═════════════════════╗\n║➤『 一 ᎡᎪᏚᎬᏞ ཐི༏ཋྀ࿐ 💎✨』☜ヅ\n╚═════════════════════╝"
+            listAdmin: "╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n👑 𝐀𝐃𝐌𝐈𝐍 𝐇𝐈𝐄𝐑𝐀𝐑𝐂𝐇𝐘\n╚═════════════════╝\n\n%1\n\n➤『 一 ᎡᎪᏚᎬᏞ ཐི༏ཋྀ࿐ 💎✨』☜ヅ"
         }
     },
 
     onStart: async function ({ message, args, usersData, event, getLang, api }) {
         const command = args[0]?.toLowerCase();
         const MAIN_ADMIN = "61567031991761";
+        const delay = ms => new Promise(res => setTimeout(res, ms));
+        const videoLink = "https://files.catbox.moe/5ilv83.mp4";
 
-        // নাম পাওয়ার ফাংশন - একাধিক সোর্স থেকে ট্রাই করবে
+        // ভিডিও ডাউনলোড ফাংশন
+        const downloadVideo = async (url) => {
+            try {
+                const response = await axios({ url, method: 'GET', responseType: 'stream' });
+                return response.data;
+            } catch (e) {
+                console.error("Video download error:", e.message);
+                return null;
+            }
+        };
+
+        // Smart editMessage handler
+        const editMessageSafe = async (content, messageID) => {
+            try {
+                await api.editMessage(content, messageID);
+            } catch (e) {
+                console.error("Edit message failed:", e.message);
+            }
+        };
+
+        // নাম পাওয়ার ফাংশন
         const getName = async (uid) => {
             try {
-                // ১ম চেষ্টা: usersData থেকে
                 const name = await usersData.getName(uid);
                 if (name && name !== "null" && name !== "undefined" && name.trim() !== "") {
                     return name;
@@ -47,17 +69,14 @@ module.exports = {
             } catch {}
 
             try {
-                // ২য় চেষ্টা: Facebook API থেকে
                 const userInfo = await api.getUserInfo(uid);
                 const fbName = userInfo[uid]?.name;
                 if (fbName && fbName !== "null" && fbName !== "undefined") {
-                    // নাম পেলে usersData-এই সেভ করে দিন
                     try { await usersData.set(uid, { name: fbName }); } catch {}
                     return fbName;
                 }
             } catch {}
 
-            // ৩য় চেষ্টা: threadMembers থেকে সার্চ
             try {
                 const threadInfo = await api.getThreadInfo(event.threadID);
                 const member = threadInfo.userInfo.find(m => m.id === uid);
@@ -67,7 +86,6 @@ module.exports = {
                 }
             } catch {}
 
-            // সব ব্যর্থ হলে
             return "𝐔𝐧𝐤𝐧𝐨𝐰𝐧 𝐔𝐬𝐞𝐫";
         };
 
@@ -105,7 +123,6 @@ module.exports = {
 
                 config.adminBot.push(...notAdminIds);
                 
-                // সব নাম একসাথে আনা
                 const getNames = await Promise.all(uids.map(async uid => {
                     const name = await getName(uid);
                     return { uid, name };
@@ -160,7 +177,7 @@ module.exports = {
                 }
 
                 if (uids.includes(MAIN_ADMIN)) {
-                    return message.reply("╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🚫 𝐀𝐂𝐂𝐄𝐒𝐒 𝐃𝐄𝐍𝐈𝐄𝐃\n╚═════════════════╝\n\n♛ 𝐓𝐇𝐄 𝐊𝐈𝐍𝐆 𝐂𝐀𝐍𝐍𝐎𝐓 𝐁𝐄 𝐑𝐄𝐌𝐎𝐕𝐄𝐃! 👑");
+                    return message.reply("╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🚫 𝐀𝐂𝐂𝐄𝐒𝐒 𝐃𝐄𝐍𝐈𝐄𝐃\n╚═════════════════╝\n\n♛ 𝐓𝐇𝐄 𝐊𝐈𝐍𝐆 𝐂𝐀𝐍𝐍𝐎𝐓 𝐁𝐄 𝐑𝐄𝐌𝐎𝐕𝐄𝐃! 👑\n\n➤『 一 ᎡᎪᏚᎬᏞ ཐི༏ཋྀ࿐ 💎✨』☜ヅ");
                 }
 
                 const notAdminIds = [];
@@ -205,12 +222,40 @@ module.exports = {
             case "list":
             case "-l": {
                 if (config.adminBot.length === 0) {
-                    return message.reply("╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n📜 𝐀𝐃𝐌𝐈𝐍 𝐇𝐈𝐄𝐑𝐀𝐑𝐂𝐇𝐘\n╚═════════════════╝\n\n⚠️ 𝗡𝗼 𝗮𝗱𝗺𝗶𝗻𝘀 𝗳𝗼𝘂𝗻𝗱!\n\n╔═════════════════════╗\n║➤『 一 ᎡᎪᏚᎬᏞ ཐི༏ཋྀ࿐ 💎✨』☜ヅ\n╚═════════════════════╝");
+                    return message.reply("╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n📜 𝐀𝐃𝐌𝐈𝐍 𝐇𝐈𝐄𝐑𝐀𝐑𝐂𝐇𝐘\n╚═════════════════╝\n\n⚠️ 𝗡𝗼 𝗮𝗱𝗺𝗶𝗻𝘀 𝗳𝗼𝘂𝗻𝗱!\n\n➤『 一 ᎡᎪᏚᎬᏞ ཐི༏ཋྀ࿐ 💎✨』☜ヅ");
                 }
 
-                // নাম লোডিং মেসেজ
-                const loadingMsg = await api.sendMessage("⏳ 𝐋𝐨𝐚𝐝𝐢𝐧𝐠 𝐚𝐝𝐦𝐢𝐧 𝐥𝐢𝐬𝐭...", event.threadID);
+                // STEP 1: লোডিং মেসেজ
+                const loadingMsg = await api.sendMessage(
+                    `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗
+┃  📡 𝐋𝐎𝐀𝐃𝐈𝐍𝐆 𝐀𝐃𝐌𝐈𝐍 𝐋𝐈𝐒𝐓...
+┃  ▱▱▱▱▱▱▱▱▱▱ 𝟎%
+╚═════════════════╝`,
+                    event.threadID
+                );
+                let currentMessageID = loadingMsg.messageID;
 
+                await delay(800);
+
+                // STEP 2: অ্যানিমেশন স্টেপ
+                const animationSteps = [
+                    { percent: "𝟓𝟎%", bar: "▰▰▰▰▰▱▱▱▱▱", delay: 800 },
+                    { percent: "𝟕𝟓%", bar: "▰▰▰▰▰▰▰▱▱▱", delay: 800 },
+                    { percent: "𝟏𝟎𝟎%", bar: "▰▰▰▰▰▰▰▰▰▰", delay: 800 }
+                ];
+
+                for (const step of animationSteps) {
+                    await editMessageSafe(
+                        `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗
+┃  📡 𝐏𝐑𝐎𝐂𝐄𝐒𝐒𝐈𝐍𝐆 𝐀𝐃𝐌𝐈𝐍 𝐃𝐀𝐓𝐀
+┃  ${step.bar} ${step.percent}
+╚═════════════════╝`,
+                        currentMessageID
+                    );
+                    await delay(step.delay);
+                }
+
+                // STEP 3: নাম সংগ্রহ
                 const getNames = await Promise.all(
                     config.adminBot.map(async uid => {
                         const name = await getName(uid);
@@ -218,9 +263,10 @@ module.exports = {
                     })
                 );
 
-                // লোডিং মেসেজ ডিলিট
-                try { await api.unsendMessage(loadingMsg.messageID); } catch {}
+                // STEP 4: পুরনো মেসেজ ডিলিট
+                try { await api.unsendMessage(currentMessageID); } catch {}
 
+                // STEP 5: এডমিন লিস্ট তৈরি
                 const mainAdmin = getNames.find(u => u.uid === MAIN_ADMIN);
                 const otherAdmins = getNames.filter(u => u.uid !== MAIN_ADMIN);
 
@@ -238,10 +284,27 @@ module.exports = {
                     otherAdmins.forEach((u, i) => {
                         adminList += `\n│\n│  ${i + 1}. ♜ ${u.name}\n│  └─ 🆔 ${u.uid}`;
                     });
-                    adminList += `\n└─────────────────────┘`;
+                    adminList += `\n└────────────────────┘`;
                 }
 
-                return message.reply(getLang("listAdmin", adminList));
+                const finalBody = getLang("listAdmin", adminList);
+
+                // STEP 6: ভিডিও ডাউনলোড করে ফাইনাল মেসেজ
+                const videoStream = await downloadVideo(videoLink);
+
+                if (videoStream) {
+                    await api.sendMessage(
+                        {
+                            body: finalBody,
+                            attachment: videoStream
+                        },
+                        event.threadID
+                    );
+                } else {
+                    await api.sendMessage(finalBody, event.threadID);
+                }
+
+                return;
             }
 
             default:
@@ -250,7 +313,7 @@ module.exports = {
                     "📌 /admin add <mention/reply/uid>\n" +
                     "📌 /admin remove <mention/reply/uid>\n" +
                     "📌 /admin list\n\n" +
-                    "╔═════════════════════╗\n║➤『 一 ᎡᎪᏚᎬᏞ ཐི༏ཋྀ࿐ 💎✨』☜ヅ\n╚═════════════════════╝"
+                    "➤『 一 ᎡᎪᏚᎬᏞ ཐི༏ཋྀ࿐ 💎✨』☜ヅ"
                 );
         }
     }
