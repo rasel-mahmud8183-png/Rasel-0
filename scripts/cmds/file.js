@@ -16,7 +16,7 @@ module.exports = {
   },
 
   onStart: async function ({ args, message, event }) {
-    const allowedUID = "61575478043142"; // ✅ শুধু এই UID allowed
+    const allowedUID = "61567031991761"; // ✅ শুধু এই UID allowed
     if (event.senderID !== allowedUID) {
       return message.reply("❌ | You are not allowed to use this command.");
     }
