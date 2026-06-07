@@ -1,6 +1,6 @@
 /**
  * @file edit.js
- * @description Smart Image Generator & Auto-Reply Merger for Goat-Bot
+ * @description Smart Image Generator & Auto-Reply Merger for Goat-Bot (Fast NeoKEX API Integrated)
  * @credits Rasel Mahmud
  */
 
@@ -11,23 +11,18 @@ const path = require("path");
 // এডিট এবং মার্জ এপিআই-এর জন্য ডাইনামিক সোর্স লিংক
 const apiUrl = "https://raw.githubusercontent.com/Saim-x69x/sakura/main/ApiUrl.json";
 
-const GEN_API = "https://images2gpt.com";
-const MAX_POLLS = 45;
-const POLL_INTERVAL = 2000;
+// CHANGED: আপনার দেওয়া নতুন এবং ফাস্ট জেনারেটর এপিআই এন্ডপয়েন্ট
+const GEN_API = "https://neokex-img-api.vercel.app/generate";
 
-let cachedAuth = { token: null, uses: 0, max: 9 };
 // সেশন ট্র্যাকার গ্লোবাল অবজেক্ট
 global.activeEditSessions = global.activeEditSessions || {};
 
-// গিটহাব থেকে এডিট বা মার্জ করার সঠিক এপিআই এন্ডপয়েন্ট তুলে আনার ফাংশন
+// গিটহাব থেকে এডিট বা মার্জ করার এপিআই এন্ডপয়েন্ট তুলে আনার ফাংশন
 async function getApis() {
   try {
     const res = await axios.get(apiUrl);
-    return {
-      editApi: res.data.apiv3
-    };
+    return { editApi: res.data.apiv3 };
   } catch (err) {
-    // ফ্যালব্যাক এন্ডপয়েন্ট (যদি কোনো কারণে গিটহাব রেসপন্স না করে)
     return { editApi: "https://free-api.saim-x.workers.dev/v3/edit" };
   }
 }
@@ -37,63 +32,20 @@ async function urlToBase64(url) {
   return Buffer.from(res.data).toString("base64");
 }
 
-async function getGenToken(headers) {
-  if (cachedAuth.token && cachedAuth.uses < cachedAuth.max) {
-    cachedAuth.uses++;
-    return cachedAuth.token;
+// CHANGED: নতুন এপিআই অনুযায়ী সরাসরি স্ট্রিম হিসেবে ইমেজ জেনারেট করার ফাংশন
+async function generateImageStream(prompt) {
+  const fullApiUrl = `${GEN_API}?prompt=${encodeURIComponent(prompt.trim())}&model=gpt1.5`;
+  const response = await axios.get(fullApiUrl, {
+    responseType: 'stream',
+    timeout: 60000 
+  });
+  if (response.status !== 200) {
+    throw new Error(`API error: ${response.status}`);
   }
-  const email = `u_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@1secmail.com`;
-  const password = "Gen" + Math.random().toString(36).slice(2, 10) + "!1";
-  const signup = await axios.post(`${GEN_API}/api/auth/signup`, { email, password }, { headers });
-  if (!signup.data.ok) throw new Error(signup.data.error || "signup failed");
-  cachedAuth = { token: signup.data.token, uses: 1, max: 9 };
-  return cachedAuth.token;
+  return response.data;
 }
 
-// শুধু নতুন ছবি জেনারেট করার জন্য মূল ফাংশন
-async function generateImage(prompt) {
-  const headers = {
-    "Content-Type": "application/json",
-    Origin: GEN_API,
-    Referer: `${GEN_API}/`,
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-  };
-
-  let token = await getGenToken(headers);
-  let authHeaders = { ...headers, Authorization: `Bearer ${token}` };
-
-  const payload = { prompt: prompt, aspect_ratio: "1:1", resolution: "1K" };
-
-  let submit;
-  try {
-    submit = await axios.post(`${GEN_API}/api/generate`, payload, { headers: authHeaders });
-  } catch (e) {
-    cachedAuth = { token: null, uses: 0, max: 9 };
-    token = await getGenToken(headers);
-    authHeaders = { ...headers, Authorization: `Bearer ${token}` };
-    submit = await axios.post(`${GEN_API}/api/generate`, payload, { headers: authHeaders });
-  }
-  
-  if (!submit.data.ok) throw new Error(submit.data.error || "submit failed");
-  const taskId = submit.data.taskId;
-  const startTime = Date.now();
-
-  for (let i = 0; i < MAX_POLLS; i++) {
-    await new Promise((r) => setTimeout(r, i === 0 ? 1500 : POLL_INTERVAL));
-    const { data } = await axios.get(
-      `${GEN_API}/api/status?taskId=${encodeURIComponent(taskId)}`,
-      { headers: authHeaders }
-    );
-    if (data.state === "success") {
-      const time = Math.round((Date.now() - startTime) / 1000);
-      return { url: data.resultUrls[0], time };
-    }
-    if (data.state === "fail") throw new Error(data.failMsg || "generation failed");
-  }
-  throw new Error("Timeout - generation took too long");
-}
-
-// এডিট এবং দুই বা ততোধিক ইমেজ মার্জ করার ফাংশন
+// এডিট এবং দুই বা ততোধিক ইমেজ মার্জ করার ফাংশন (আগের মেকানিজম বহাল রাখা হয়েছে)
 async function editOrMergeImage(imagesArray, prompt) {
   const { editApi } = await getApis();
   const base64Images = await Promise.all(imagesArray.map(url => urlToBase64(url)));
@@ -111,20 +63,6 @@ async function editOrMergeImage(imagesArray, prompt) {
   });
   const time = Math.round((Date.now() - startTime) / 1000);
   return { data: res.data, time };
-}
-
-async function downloadAndSaveImage(url, imgPath) {
-  const response = await axios.get(url, {
-    responseType: "stream",
-    headers: { Referer: `${GEN_API}/` },
-    timeout: 30000
-  });
-  const writer = fs.createWriteStream(imgPath);
-  response.data.pipe(writer);
-  return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", reject);
-  });
 }
 
 function createBox(title, content, time = null) {
@@ -151,12 +89,12 @@ function getAttachmentUrl(messageReply) {
 module.exports = {
   config: {
     name: "edit",
-    version: "5.0",
+    version: "5.5",
     author: "Rasel Mahmud",
     countDown: 5,
     role: 0,
     shortDescription: "Edit, generate or auto-merge images smoothly",
-    longDescription: "Image adjustment handler with clean custom formatting and personalized styling.",
+    longDescription: "Image adjustment handler with fast integrated generator API and custom styling.",
     category: "AI-IMAGE-EDIT",
     guide: "{p}edit <prompt>\n\n• Reply to bot result with another image to auto-merge without prefix!"
   },
@@ -182,8 +120,7 @@ module.exports = {
         await fs.writeFile(imgPath, Buffer.from(imageBuffer));
         await api.unsendMessage(processingMsg.messageID);
 
-        // FIXED: টাইটেল মিস্টেক সম্পূর্ণ মুক্ত
-        const boxMessage = createBox("𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢", { "✅ Images adjusted & merged successfully": "" }, time);
+        const boxMessage = createBox("𝐇e𝐈𝐢•𝗟𝗨𝗠𝗢", { "✅ Images adjusted & merged successfully": "" }, time);
 
         await api.sendMessage({
           body: boxMessage,
@@ -221,8 +158,7 @@ module.exports = {
         await fs.writeFile(imgPath, Buffer.from(imageBuffer));
         await api.unsendMessage(processingMsg.messageID);
 
-        // FIXED: টাইটেল মিস্টেক সম্পূর্ণ মুক্ত
-        const boxMessage = createBox("𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢", { "✅ Target images merged": "" }, time);
+        const boxMessage = createBox("𝐇e𝐈𝐢•𝗟𝗨𝗠𝗢", { "✅ Target images merged": "" }, time);
         await api.sendMessage({ body: boxMessage, attachment: fs.createReadStream(imgPath) }, event.threadID, (err, info) => {
           if (!err && info && info.messageID) global.activeEditSessions[info.messageID] = initialImgUrl;
         }, event.messageID);
@@ -241,7 +177,7 @@ module.exports = {
 
     const isEditMode = initialImgUrl !== null;
     const processingMsg = await message.reply(isEditMode ? "Distributed Editing..." : "🎨 Generating image...");
-    const imgPath = path.join(__dirname, "cache", `${Date.now()}_output.jpg`);
+    const imgPath = path.join(__dirname, "cache", `output_${Date.now()}.png`);
 
     try {
       if (isEditMode) {
@@ -250,8 +186,7 @@ module.exports = {
         await fs.writeFile(imgPath, Buffer.from(imageBuffer));
         await api.unsendMessage(processingMsg.messageID);
         
-        // FIXED: টাইটেল মিস্টেক সম্পূর্ণ মুক্ত
-        const boxMessage = createBox("𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢", { "✅ Image edited successfully": "", "Prompt": prompt }, time);
+        const boxMessage = createBox("𝐇e𝐈𝐢•𝗟𝗨𝗠𝗢", { "✅ Image edited successfully": "", "Prompt": prompt }, time);
         await api.sendMessage({
           body: boxMessage,
           attachment: fs.createReadStream(imgPath)
@@ -262,19 +197,30 @@ module.exports = {
         }, event.messageID);
 
       } else {
-        const result = await generateImage(prompt);
+        // CHANGED: নতুন এপিআই দিয়ে ফাস্ট জেনারেশন মেকানিজম
+        const startTime = Date.now();
+        const imageStream = await generateImageStream(prompt);
+        
         await fs.ensureDir(path.dirname(imgPath));
-        await downloadAndSaveImage(result.url, imgPath);
+        const writer = fs.createWriteStream(imgPath);
+        imageStream.pipe(writer);
+
+        await new Promise((resolve, reject) => {
+          writer.on("finish", resolve);
+          writer.on("error", reject);
+        });
+
+        const time = Math.round((Date.now() - startTime) / 1000);
         await api.unsendMessage(processingMsg.messageID);
         
-        // FIXED: টাইটেল মিস্টেক সম্পূর্ণ মুক্ত
-        const boxMessage = createBox("𝐇\u0065\u0049\u0069•𝗟𝗨𝗠𝗢", { "✅ New image generated": "", "Prompt": prompt }, result.time);
+        const boxMessage = createBox("𝐇e𝐈𝐢•𝗟𝗨𝗠𝗢", { "✅ New image generated": "", "Prompt": prompt }, time);
         await api.sendMessage({
           body: boxMessage,
           attachment: fs.createReadStream(imgPath)
         }, event.threadID, (err, info) => {
           if (!err && info && info.messageID) {
-            global.activeEditSessions[info.messageID] = result.url;
+            // ফেসবুক ইমেজ ইউআরএল বা সেশন ট্র্যাকিং সেভ করার জন্য
+            global.activeEditSessions[info.messageID] = "active_session"; 
           }
         }, event.messageID);
       }
