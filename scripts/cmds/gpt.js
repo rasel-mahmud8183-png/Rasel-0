@@ -1,94 +1,75 @@
-const axios = require("axios");
+const axios = require('axios');
+const fs = require('fs-extra'); 
+const path = require('path');
+
+const API_ENDPOINT = "https://neokex-img-api.vercel.app/generate"; 
 
 module.exports = {
   config: {
-    name: "gpt5",
-    aliases: ["gpt"],
-    version: "1.0",
-    author: "Aryan Chauhan",
-    countDown: 5,
+    name: "gpt",
+    aliases: ["gpt1.5", "gptimg"],
+    version: "1.0", 
+    author: "NeoKEX",
+    countDown: 15,
     role: 0,
-    shortDescription: { en: "Chat with GPT-5" },
-    longDescription: { en: "Talk with GPT-5 AI without conversation memory." },
-    category: "ai",
-    guide: { en: "Use: !gpt5 <message>\nExample: !gpt5 hello" }
+    longDescription: "Generate an image using the GPT 1.5 model.",
+    category: "ai-image",
+    guide: {
+      en: "{pn} <prompt>"
+    }
   },
 
-  onStart: async function ({ api, event, args }) {
-    const prompt = args.join(" ");
+  onStart: async function({ message, args, event }) {
+    
+    let prompt = args.join(" ");
+
     if (!prompt) {
-      return api.sendMessage(
-        "⚠️ Please provide a message to start chatting.\nExample: !gpt5 hello",
-        event.threadID,
-        event.messageID
-      );
+        return message.reply("❌ Please provide a prompt.");
     }
 
-    api.setMessageReaction("⏳", event.messageID, () => {}, true);
+    message.reaction("🚬", event.messageID);
+    let tempFilePath; 
 
     try {
-      const response = await axios.get("https://arychauhann.onrender.com/api/gpt5", {
-        params: { prompt }
+      const fullApiUrl = `${API_ENDPOINT}?prompt=${encodeURIComponent(prompt.trim())}&model=gpt1.5`;
+      
+      const response = await axios.get(fullApiUrl, {
+          responseType: 'stream',
+          timeout: 60000 
       });
 
-      if (!response.data || !response.data.result) {
-        api.setMessageReaction("❌", event.messageID, () => {}, true);
-        return api.sendMessage("❌ GPT-5 did not return a response.", event.threadID, event.messageID);
+      if (response.status !== 200) {
+           throw new Error(`API error: ${response.status}`);
       }
+      
+      const cacheDir = path.join(__dirname, 'cache');
+      if (!fs.existsSync(cacheDir)) {
+          await fs.ensureDir(cacheDir); 
+      }
+      
+      tempFilePath = path.join(cacheDir, `gpt_${Date.now()}.png`);
+      
+      const writer = fs.createWriteStream(tempFilePath);
+      response.data.pipe(writer);
 
-      const answer = response.data.result.trim();
-
-      api.sendMessage(`${answer}`, event.threadID, (err, info) => {
-        if (err) return;
-        api.setMessageReaction("✅", event.messageID, () => {}, true);
-
-        global.GoatBot.onReply.set(info.messageID, {
-          commandName: this.config.name,
-          author: event.senderID
-        });
-      }, event.messageID);
-
-    } catch (err) {
-      console.error(err);
-      api.setMessageReaction("❌", event.messageID, () => {}, true);
-      api.sendMessage("❌ An error occurred while contacting GPT-5 AI.", event.threadID, event.messageID);
-    }
-  },
-
-  onReply: async function ({ api, event, Reply }) {
-    if (event.senderID !== Reply.author) return;
-
-    const prompt = event.body;
-    if (!prompt) return;
-
-    api.setMessageReaction("⏳", event.messageID, () => {}, true);
-
-    try {
-      const response = await axios.get("https://arychauhann.onrender.com/api/gpt5", {
-        params: { prompt }
+      await new Promise((resolve, reject) => {
+        writer.on("finish", resolve);
+        writer.on("error", reject);
       });
 
-      if (!response.data || !response.data.result) {
-        api.setMessageReaction("❌", event.messageID, () => {}, true);
-        return api.sendMessage("❌ GPT-5 did not return a response.", event.threadID, event.messageID);
+      message.reaction("✅", event.messageID);
+      await message.reply({
+        body: `gpt 1.5 image generated 🐦`,
+        attachment: fs.createReadStream(tempFilePath)
+      });
+
+    } catch (error) {
+      message.reaction("❌", event.messageID);
+      message.reply(`❌ Error: ${error.message}`);
+    } finally {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+          await fs.unlink(tempFilePath);
       }
-
-      const answer = response.data.result.trim();
-
-      api.sendMessage(`${answer}`, event.threadID, (err, info) => {
-        if (err) return;
-        api.setMessageReaction("✅", event.messageID, () => {}, true);
-
-        global.GoatBot.onReply.set(info.messageID, {
-          commandName: this.config.name,
-          author: event.senderID
-        });
-      }, event.messageID);
-
-    } catch (err) {
-      console.error(err);
-      api.setMessageReaction("❌", event.messageID, () => {}, true);
-      api.sendMessage("❌ An error occurred while chatting with GPT-5 AI.", event.threadID, event.messageID);
     }
   }
 };
