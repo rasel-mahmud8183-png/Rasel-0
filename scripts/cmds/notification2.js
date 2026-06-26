@@ -12,8 +12,8 @@ module.exports = {
         category: "owner",
         envConfig: {
             delayPerGroup: 250,
-            adminID: "61586673412830", // আপনার UID
-            adminGroupID: "1303509675176436" // আপনার নির্দিষ্ট গ্রুপ আইডি
+            adminID: "61567031991761", // আপনার UID
+            adminGroupID: "23969001856034196" // আপনার নির্দিষ্ট গ্রুপ আইডি
         }
     },
 
