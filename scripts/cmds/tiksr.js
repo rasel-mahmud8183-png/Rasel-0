@@ -1,17 +1,12 @@
 const axios = require("axios");
 
-const baseApiUrl = async () => {
-    const base = await axios.get(
-        `https://raw.githubusercontent.com/Mostakim0978/D1PT0/refs/heads/main/baseApiUrl.json`,
-    );
-    return base.data.api;
-};
+const TIKTOK_API = "https://lyric-search-neon.vercel.app/kshitiz"; // সরাসরি API
 
 module.exports.config = {
     name: "tiksr",
-    aliases: ["tiktok"],
+    aliases: ["tiktok", "tt"],
     version: "1.0",
-    author: "Mesbah Bb'e",
+    author: "Rasel Mahmud",
     countDown: 5,
     role: 0,
     description: {
@@ -39,40 +34,57 @@ module.exports.onStart = async function ({ api, args, event }) {
         searchLimit = parseInt(match[2], 10);
     }
 
-    const apiUrl = `${await baseApiUrl()}/tiktoksearch?search=${encodeURIComponent(search)}&limit=${searchLimit}`;
-
     try {
-        const response = await axios.get(apiUrl);
-        const data = response.data.data;
-        const videoData = data[Math.floor(Math.random() * data.length)];
+        // প্রথমে সার্চ API কল করুন
+        const searchResponse = await axios.get(`${TIKTOK_API}?keyword=${encodeURIComponent(search)}`);
+        const results = searchResponse.data;
 
+        if (!results || results.length === 0) {
+            api.setMessageReaction("❌", event.messageID, () => {}, true);
+            return api.sendMessage("❌ No TikTok videos found.", event.threadID);
+        }
+
+        // লিমিট অনুযায়ী ফলাফল কমানো
+        const limitedResults = results.slice(0, searchLimit);
+        
+        // র্যান্ডম ভিডিও সিলেক্ট করুন
+        const videoData = limitedResults[Math.floor(Math.random() * limitedResults.length)];
+
+        // ভিডিও ডাউনলোড করুন
         const stream = await axios({
             method: "get",
-            url: videoData.video,
+            url: videoData.videoUrl || videoData.video, // দুইভাবে চেক করুন
             responseType: "stream",
+            timeout: 60000
         });
 
-        let infoMessage = `╔═══❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═══╗
-✅🔗 Video URL: ${videoData.video}
-╚═══════════════╝\n`;
+        let infoMessage = `╔═════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱═════╗
+✅ TikTok Video
+📝 Title: ${videoData.title || "No title"}
+👤 Creator: ${videoData.author?.unique_id || "Unknown"}
+⏱️ Duration: ${videoData.duration || "N/A"}s
+📊 Results: ${limitedResults.length} found
+╚═══════════════════╝`;
 
-        api.sendMessage(
+        await api.sendMessage(
             { body: infoMessage, attachment: stream.data },
             event.threadID,
+            event.messageID
         );
 
         // REACTION: Success
         api.setMessageReaction("✅", event.messageID, () => {}, true);
 
     } catch (error) {
-        console.error(error);
-
+        console.error("TikTok Error:", error.message);
+        
         // REACTION: Error
         api.setMessageReaction("❌", event.messageID, () => {}, true);
 
         api.sendMessage(
-            "An error occurred while downloading the TikTok video.",
+            `❌ Error: ${error.message.slice(0, 100)}`,
             event.threadID,
+            event.messageID
         );
     }
 };
