@@ -1,23 +1,21 @@
 const axios = require('axios');
 const BOT_NICKNAME = "➤『 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 💎✨』☜ヅ";
 
-// TikTok ভিডিও ফাংশন (অপরিবর্তিত)
+// TikTok ভিডিও ফাংশন (আপডেটেড API সহ)
 async function getTikTokVideo() {
   try {
-    console.log('🔄 Fetching base API URL from GitHub...');
-    const baseApiResponse = await axios.get('https://raw.githubusercontent.com/Mostakim0978/D1PT0/refs/heads/main/baseApiUrl.json');
-    const baseApi = baseApiResponse.data.api;
-    console.log('✅ Base API URL:', baseApi);
+    console.log('🔄 Fetching TikTok video from new API...');
     
-    const searchQuery = encodeURIComponent('anime phonk edit');
-    const apiUrl = `${baseApi}/tiktoksearch?search=${searchQuery}&limit=10`;
+    const apiUrl = `https://lyric-search-neon.vercel.app/kshitiz?keyword=anime%20phonk%20edit`;
     console.log('🎬 Calling TikTok API:', apiUrl);
     
-    const response = await axios.get(apiUrl);
+    const response = await axios.get(apiUrl, {
+      timeout: 15000
+    });
     console.log('📊 API Response Status:', response.status);
     
-    const videos = response.data.data;
-    if (!videos || videos.length === 0) {
+    const videos = response.data;
+    if (!videos || !Array.isArray(videos) || videos.length === 0) {
       console.log('❌ No videos found in API response');
       return null;
     }
@@ -28,30 +26,33 @@ async function getTikTokVideo() {
     
     console.log('🎥 Selected Video:', {
       title: selectedVideo.title,
-      url: selectedVideo.video ? 'URL exists' : 'No URL'
+      url: selectedVideo.videoUrl ? 'URL exists' : 'No URL'
     });
     
     return {
-      url: selectedVideo.video,
+      url: selectedVideo.videoUrl,
       title: selectedVideo.title || 'Anime Phonk Edit',
-      videoId: selectedVideo.id || randomIndex
+      videoId: selectedVideo.id || randomIndex,
+      author: selectedVideo.author?.unique_id || 'Unknown'
     };
     
   } catch (error) {
     console.error('❌ TikTok API Error:', error.message);
     
-    // Fallback API
     try {
-      console.log('🔄 Trying fallback API...');
-      const fallbackResponse = await axios.get('https://mahi-apis.onrender.com/api/tiktoksearch?search=anime%20phonk%20edit&limit=10');
-      const fallbackVideos = fallbackResponse.data.data;
+      console.log('🔄 Trying backup search...');
+      const fallbackResponse = await axios.get('https://lyric-search-neon.vercel.app/kshitiz?keyword=phonk%20edit', {
+        timeout: 15000
+      });
+      const fallbackVideos = fallbackResponse.data;
       
-      if (fallbackVideos && fallbackVideos.length > 0) {
+      if (fallbackVideos && Array.isArray(fallbackVideos) && fallbackVideos.length > 0) {
         const randomVideo = fallbackVideos[Math.floor(Math.random() * fallbackVideos.length)];
-        console.log('✅ Fallback video found');
+        console.log('✅ Backup video found');
         return {
-          url: randomVideo.video,
-          title: randomVideo.title || 'Anime Phonk Edit (Fallback)'
+          url: randomVideo.videoUrl,
+          title: randomVideo.title || 'Phonk Edit (Backup)',
+          author: randomVideo.author?.unique_id || 'Unknown'
         };
       }
     } catch (fallbackError) {
@@ -62,13 +63,15 @@ async function getTikTokVideo() {
   }
 }
 
-// ভিডিও স্ট্রীম ডাউনলোড ফাংশন
 async function getStreamFromURL(url) {
   try {
     console.log('📥 Downloading video from:', url);
     const response = await axios.get(url, { 
       responseType: 'stream',
-      timeout: 30000
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
     });
     console.log('✅ Video stream downloaded successfully');
     return response.data;
@@ -78,7 +81,6 @@ async function getStreamFromURL(url) {
   }
 }
 
-// নিকনেম সেট করার ফাংশন
 async function setBotNickname(api, threadID) {
   try {
     const botUserID = api.getCurrentUserID();
@@ -91,12 +93,11 @@ async function setBotNickname(api, threadID) {
   }
 }
 
-// মেইন মডিউল
 module.exports = {
   config: {
     name: "pending",
-    aliases: ["pend", "approve", "groupreq", "pa"],  // ✅ pa অ্যালিয়াস যোগ করা হয়েছে
-    version: "6.0",  // ✅ ভার্শন আপডেট
+    aliases: ["pend", "approve", "groupreq", "pa"],
+    version: "6.1",
     author: "Rasel Mahmud",
     countDown: 3,
     role: 2,
@@ -109,11 +110,9 @@ module.exports = {
     }
   },
 
-  // ✅ সংশোধিত onReply ফাংশন
   onReply: async function ({ api, event, Reply }) {
     const { threadID, messageID, senderID, body } = event;
     
-    // শুধুমাত্র কমান্ড প্রেরকই রিপ্লে করতে পারবে
     if (String(senderID) !== String(Reply.author)) {
       return api.sendMessage("⚠️ You are not authorized to use this reply.", threadID, messageID);
     }
@@ -121,7 +120,6 @@ module.exports = {
     const { pending } = Reply;
     const input = body.trim();
     
-    // APPROVE রিপ্লে
     if (Reply.type === 'approve') {
       const numbers = input.split(/\s+/)
         .map(num => parseInt(num))
@@ -142,18 +140,15 @@ module.exports = {
         try {
           console.log(`\n🚀 Processing group ${num}: ${group.name} (${group.threadID})`);
           
-          // 1. নিকনেম সেট করুন
           await setBotNickname(api, group.threadID);
           
-          // 2. TikTok ভিডিও পান
           const tiktokVideo = await getTikTokVideo();
           let videoStream = null;
           if (tiktokVideo && tiktokVideo.url) {
             videoStream = await getStreamFromURL(tiktokVideo.url);
           }
           
-          // 3. গ্রুপে মেসেজ পাঠান
-          const messageBody = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🎉 Thank you for inviting me to: ${group.name}!\n📌 Prefix: ${global.GoatBot.config.prefix}\n📜 Use ${global.GoatBot.config.prefix}help for commands\n👑 Owner: Rasel Mahmud\n🔗 Facebook: https://facebook.com/61586335299049\n╚══════════════════╝` + 
+          const messageBody = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🎉 Thank you for inviting me to: ${group.name}!\n📌 Prefix: ${global.GoatBot.config.prefix}\n📜 Use ${global.GoatBot.config.prefix}help for commands\n👑 Owner: Rasel Mahmud\n🔗 Facebook: https://www.facebook.com/mi.ujika.byanda\n╚══════════════════╝` + 
             (videoStream ? '\n\n🎬 **Enjoy this anime phonk edit!**' : '');
           
           if (videoStream) {
@@ -179,12 +174,10 @@ module.exports = {
         }
       }
       
-      // ফলাফল রিপোর্ট
       const resultMessage = `📋 **Approval Results:**\n\n${results.join('\n')}\n\n✅ Approved: ${approvedCount} groups\n🎬 Videos sent: ${videoSentCount}`;
       return api.sendMessage(resultMessage, threadID, messageID);
     }
     
-    // DECLINE রিপ্লে
     if (Reply.type === 'decline') {
       const numbers = input.split(/\s+/)
         .map(num => parseInt(num))
@@ -212,14 +205,12 @@ module.exports = {
     }
   },
 
-  // ✅ সংশোধিত onStart ফাংশন
   onStart: async function ({ api, event, args }) {
     const { threadID, messageID, senderID } = event;
     const command = args[0] ? args[0].toLowerCase() : 'list';
 
-    // HELP কমান্ড
     if (command === 'help') {
-      const helpMessage = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 - PENDING SYSTEM v6.0 ❱════╗
+      const helpMessage = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 - PENDING SYSTEM v6.1 ❱════╗
 
 📋 **COMMANDS:**
 • ${global.GoatBot.config.prefix}pending - View pending groups
@@ -242,7 +233,6 @@ module.exports = {
       return api.sendMessage(helpMessage, threadID, messageID);
     }
 
-    // APPROVE ALL কমান্ড
     if (command === 'all') {
       try {
         const pendingList = await api.getThreadList(100, null, ["PENDING"]);
@@ -265,7 +255,7 @@ module.exports = {
               videoStream = await getStreamFromURL(tiktokVideo.url);
             }
             
-            const messageBody = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🎉 Thank you for inviting me!\n📌 Prefix: ${global.GoatBot.config.prefix}\n📜 Use ${global.GoatBot.config.prefix}help\n👑 Owner: Rasel Mahmud\n╚══════════════════╝`;
+            const messageBody = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🎉 Thank you for inviting me!\n📌 Prefix: ${global.GoatBot.config.prefix}\n📜 Use ${global.GoatBot.config.prefix}help\n👑 Owner: Rasel Mahmud\n🔗 Facebook: https://www.facebook.com/mi.ujika.byanda\n╚══════════════════╝`;
             
             if (videoStream) {
               await api.sendMessage({
@@ -291,7 +281,6 @@ module.exports = {
       }
     }
 
-    // DIRECT APPROVE/DECLINE কমান্ড
     if (command === 'approve' || command === 'decline') {
       const numbers = args.slice(1).map(num => parseInt(num)).filter(num => !isNaN(num) && num > 0);
       
@@ -324,7 +313,7 @@ module.exports = {
                   videoStream = await getStreamFromURL(tiktokVideo.url);
                 }
                 
-                const messageBody = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🎉 Thank you for inviting me!\n📌 Prefix: ${global.GoatBot.config.prefix}\n📜 Use ${global.GoatBot.config.prefix}help\n👑 Owner: Rasel Mahmud\n╚══════════════════╝`;
+                const messageBody = `╔════❰ 𝐇𝐞𝐈𝐢•𝗟𝗨𝗠𝗢 ❱════╗\n🎉 Thank you for inviting me!\n📌 Prefix: ${global.GoatBot.config.prefix}\n📜 Use ${global.GoatBot.config.prefix}help\n👑 Owner: Rasel Mahmud\n🔗 Facebook: https://www.facebook.com/mi.ujika.byanda\n╚══════════════════╝`;
                 
                 if (videoStream) {
                   await api.sendMessage({
@@ -357,7 +346,6 @@ module.exports = {
       }
     }
 
-    // DEFAULT: PENDING LIST দেখাবে
     try {
       console.log('🔄 Fetching pending groups...');
       
@@ -389,10 +377,8 @@ module.exports = {
       listMessage += `Example: 1 3 5\n`;
       listMessage += `╚═════════════════════╝`;
       
-      // মেসেজ পাঠান এবং রিপ্লে হ্যান্ডলার সেট করুন
       const sentMsg = await api.sendMessage(listMessage, threadID);
       
-      // ✅ GoatBot রিপ্লে সিস্টেমে যোগ করুন
       global.GoatBot.onReply.set(sentMsg.messageID, {
         commandName: "pending",
         messageID: sentMsg.messageID,
